@@ -52,7 +52,7 @@ mongoose
   });
 
 app.get("/", (req, res) => {
-  res.send("Server is running !");
+  res.send(`Server is running ! on :${port} `);
 });
 app.get("/protected-route", (req, res) => {
   if (req.session.user) {
