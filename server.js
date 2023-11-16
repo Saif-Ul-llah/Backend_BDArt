@@ -14,10 +14,10 @@ const CartItem = require("./models/CartItems");
 const app = express();
 const allowedOrigins = ["http://localhost:3000"];
 app.timeout = 300000;
+const port = process.env.PORT || 8080;
 
-
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // app.use(express.urlencoded({ extended: true }));
 
@@ -43,8 +43,8 @@ mongoose
   )
   .then(() => {
     console.log("mongoose connected with atlas");
-    app.listen(8080, () => {
-      console.log("app running on port 8080");
+    app.listen(port, () => {
+      console.log(`app running on port ${port}`);
     });
   })
   .catch((err) => {
@@ -133,92 +133,7 @@ app.post("/admin", async (req, res) => {
   }
 });
 
-//   app.post('/add-product', async (req, res) => {
-//     try {
-//       const { name, brand, price, category, imageData, imageContentType } = req.body;
-// console.log(name)
-//       // Basic validation
-//       if (!name || !brand || !price || !category || !imageData || !imageContentType) {
-//         return res.status(400).json({ message: 'All fields are required.' });
-//       }
-
-//       // Additional validation (you can customize this based on your requirements)
-
-//       // Assuming price should be a positive number
-//       if (typeof price !== 'number' || price <= 0) {
-//         return res.status(400).json({ message: 'Price must be a positive number.' });
-//       }
-
-//       // Create a new product instance
-//       const newProduct = new Product({
-//         name,
-//         brand,
-//         price,
-//         category,
-//         imageUrl: `data:${imageContentType};base64,${imageData}`,
-//       });
-
-//       // Save the product to the database
-//       const savedProduct = await newProduct.save();
-//       console.log(savedProduct);
-//       res.status(201).json(savedProduct);
-//     } catch (error) {
-//       console.error('Error adding product:', error);
-
-//       // Differentiate between validation errors and database errors
-//       if (error.name === 'ValidationError') {
-//         // Extract specific validation error messages
-//         const validationErrors = Object.values(error.errors).map((e) => e.message);
-//         res.status(400).json({ message: 'Validation failed.', errors: validationErrors });
-//       } else {
-//         res.status(500).json({ message: 'Internal Server Error' });
-//       }
-//     }
-//   });
-
-// Route to get all products
-
-// app.post('/add-product', async (req, res) => {
-//   console.log(req.body);
-//   // console.log(req.files);
-//   try {
-//     const { name, brand, price, category, imageData, imageContentType } = req.body;
-
-//     // Basic validation
-//     if (!name || !brand || !price || !category || !imageData || !imageContentType) {
-//       return res.status(400).json({ message: 'All fields are required.' });
-//     }
-//     // Create a new product instance
-//     const newProduct = new Product({
-//       name,
-//       brand,
-//       price,
-//       category,
-//       imageUrl: `data:${imageContentType};base64,${imageData}`,
-//     });
-
-//     // Save the product to the database
-//     const savedProduct = await newProduct.save();
-//     // console.log(savedProduct);
-//     res.status(201).json({message:'add-Sucessfully',savedProduct});
-//   } catch (error) {
-//     console.error('Error adding product:', error);
-
-//     // Differentiate between validation errors and database errors
-//     if (error.name === 'ValidationError') {
-//       // Extract specific validation error messages
-//       const validationErrors = Object.values(error.errors).map((e) => e.message);
-//       res.status(400).json({ message: 'Validation failed.', errors: validationErrors });
-//     } else {
-//       res.status(500).json({ message: 'Internal Server Error' });
-//     }
-//   }
-// });
-
-// ... (imports and other configurations)
-
-app.post('/add-product',async(req, res) => {
-
+app.post("/add-product", async (req, res) => {
   try {
     const {
       name,
@@ -233,7 +148,7 @@ app.post('/add-product',async(req, res) => {
     } = req.body;
 
     // Basic validation
-    if (!name || !price || !category || !imageData ) {
+    if (!name || !price || !category || !imageData) {
       return res
         .status(400)
         .json({ message: "All required fields must be provided." });
@@ -244,7 +159,7 @@ app.post('/add-product',async(req, res) => {
       name,
       price,
       category,
-      imageUrl:imageData,
+      imageUrl: imageData,
     };
 
     // Set optional fields
@@ -286,11 +201,11 @@ app.post('/add-product',async(req, res) => {
 app.get("/get-products", async (req, res) => {
   try {
     // Retrieve a limited set of products from the database
-    // const { page = 1, pageSize = 10 } = req.query; 
-    const products = await Product.find()
-      .select("name category price imageUrl brand")
-      
-   
+    // const { page = 1, pageSize = 10 } = req.query;
+    const products = await Product.find().select(
+      "name category price imageUrl brand"
+    );
+
     // Send the list of products as a response
     res.status(200).json(products);
   } catch (error) {
@@ -376,7 +291,7 @@ app.delete("/delete-product/:id", async (req, res) => {
     console.error("Error deleting product:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
-}); 
+});
 
 app.get("/get-product/:id", async (req, res) => {
   try {
@@ -393,58 +308,55 @@ app.get("/get-product/:id", async (req, res) => {
   }
 });
 
-app.get('/products-by-category/:category', async (req, res) => {
+app.get("/products-by-category/:category", async (req, res) => {
   try {
     const { page = 1, pageSize = 10 } = req.query;
     const { category } = req.params;
 
     const products = await Product.find({ category: category })
-      .select('name category price imageUrl brand')
+      .select("name category price imageUrl brand")
       .skip((page - 1) * pageSize)
       .limit(pageSize);
 
     res.status(200).json(products);
   } catch (error) {
-    console.error('Error getting products by category:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error getting products by category:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
-app.post('/update-cart',async (req, res) => {
-
+app.post("/update-cart", async (req, res) => {
   try {
-    const { productId, userId, selectedOptions, description ,img} = req.body;
-   
+    const { productId, userId, selectedOptions, description, img } = req.body;
 
     // Create a new cart item
     const newCartItem = new CartItem({
       productId,
       userId,
-      selectedOptions, 
+      selectedOptions,
       description,
-      selectedFile:img
+      selectedFile: img,
     });
 
     // Save the cart item to the database
     const savedCartItem = await newCartItem.save();
 
-    res.json({message:true, savedCartItem});
+    res.json({ message: true, savedCartItem });
   } catch (error) {
-    console.error('Error adding product to cart:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  } 
-
+    console.error("Error adding product to cart:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
-app.get('/get-cart-items/:userId', async (req, res) => {  
+app.get("/get-cart-items/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
     // console.log(userId);
-    const cartItems = await CartItem.find({userId});
+    const cartItems = await CartItem.find({ userId });
 
     res.json({ message: true, cartItems });
   } catch (error) {
-    console.error('Error getting cart items:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error("Error getting cart items:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
-}); 
+});
