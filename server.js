@@ -12,7 +12,7 @@ const mongoose = require("mongoose");
 const CartItem = require("./models/CartItems");
 
 const app = express();
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = ["http://localhost:3000","https://bd-art.vercel.app/"];
 app.timeout = 300000;
 const port = process.env.PORT || 8080;
 
