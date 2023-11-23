@@ -18,7 +18,7 @@ const axios = require('axios');
 
 const app = express();
 // const allowedOrigins = ['https://bd-art.vercel.app'];
-const allowedOrigins = ["http://localhost:3000", "https://checkout.stripe.com"];
+const allowedOrigins = ["http://localhost:3000", "https://checkout.stripe.com",'https://bd-art.vercel.app'];
 app.timeout = 300000;
 const port = process.env.PORT || 8080;
 
