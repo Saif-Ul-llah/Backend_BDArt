@@ -10,19 +10,31 @@ const compression = require("compression");
 const Product = require("./models/product");
 const mongoose = require("mongoose");
 const CartItem = require("./models/CartItems");
+const Stripe = require("stripe");
+const paypal = require("@paypal/checkout-server-sdk");
+// ('sk_test_4eC39HqLyjWDarjtT1zdp7dc')
+const stripe = Stripe("sk_test_4eC39HqLyjWDarjtT1zdp7dc");
+const axios = require('axios');
 
 const app = express();
-const allowedOrigins = ['https://bd-art.vercel.app'];
+// const allowedOrigins = ['https://bd-art.vercel.app'];
+const allowedOrigins = ["http://localhost:3000", "https://checkout.stripe.com"];
 app.timeout = 300000;
 const port = process.env.PORT || 8080;
+
+// Set up PayPal environment
+const clientId =
+  "ASXc_cVI_R_9qUDqkw3VkOGzjRVUFiUC-Rh2w8lSxwIzCzqQjTEfhSKEZa5OCy_0nqyTHo79UXYgUZ7a";
+const clientSecret =
+  "EMw_7Z61I4z4Icnoxtx-SUKnaGBTBpaCQnGW8oqgvukAuy_oHXgS3WCHUfYN75hRfpe2Wobtjp04mc1k";
+
+const environment = new paypal.core.LiveEnvironment(clientId, clientSecret);
+const client = new paypal.core.PayPalHttpClient(environment);
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// app.use(express.urlencoded({ extended: true }));
-
 app.use(fileUpload());
-// app.use(express.json())
 app.use(compression());
 const corsOptions = {
   origin: (origin, callback) => {
@@ -360,3 +372,132 @@ app.get("/get-cart-items/:userId", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+app.post("/create-checkout-session", async (req, res) => {
+  // console.log(req.body);
+  const line_items = req.body.cart.map((items) => {
+    return {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: items.productId.name,
+          images: [items.productId.imageUrl],
+          description: items.description,
+          metadata: {
+            id: items.productId._id,
+          },
+        },
+        unit_amount: items.productId.price * 100,
+      },
+      quantity: 1,
+    };
+  });
+  const session = await stripe.checkout.sessions.create({
+    line_items,
+    mode: "payment",
+    success_url: "http://localhost:3000/Orders",
+    cancel_url: "http://localhost:3000/Payment",
+    // success_url: 'https://bd-art.vercel.app/Orders',
+    // cancel_url: 'https://bd-art.vercel.app/Payment',
+  });
+
+  res.redirect(303, session.url);
+});
+
+async function getAccessToken() {
+  try {
+    const clientId =
+      "ASXc_cVI_R_9qUDqkw3VkOGzjRVUFiUC-Rh2w8lSxwIzCzqQjTEfhSKEZa5OCy_0nqyTHo79UXYgUZ7a"; // Replace with your actual PayPal client ID
+    const clientSecret =
+      "EMw_7Z61I4z4Icnoxtx-SUKnaGBTBpaCQnGW8oqgvukAuy_oHXgS3WCHUfYN75hRfpe2Wobtjp04mc1k"; // Replace with your actual PayPal client secret
+    const response = await axios.post(
+      "https://api.paypal.com/v1/oauth2/token",
+      `grant_type=client_credentials`,
+      {
+        auth: {
+          username: clientId,
+          password: clientSecret,
+        },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+    return response.data.access_token;
+  } catch (error) {
+    console.error("Error obtaining PayPal access token:", error.message);
+    throw new Error("Error obtaining PayPal access token");
+  }
+}
+
+app.post("/pay", async (req, res) => {
+  try {
+    // Check if 'total' and 'cart' properties exist in the request body
+    if (!req.body.total || !req.body.cart) {
+      throw new Error("Invalid request body");
+    }
+
+    // Obtain PayPal access token
+    const accessToken = await getAccessToken(); // Implement the function to get the access token
+
+    const lineItems = req.body.cart.map((item) => {
+      return {
+        name: item.productId.name,
+        unit_amount: {
+          currency_code: "USD",
+          value: item.productId.price.toFixed(2),
+        },
+        quantity: 1,
+      };
+    });
+
+    const request = {
+      method: "post",
+      url: "https://api.paypal.com/v2/checkout/orders", // Update with the correct PayPal API endpoint
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`, // Include the access token in the Authorization header
+      },
+      data: {
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            amount: {
+              currency_code: "USD",
+              value: req.body.total.toFixed(2),
+              breakdown: {
+                item_total: {
+                  currency_code: "USD",
+                  value: req.body.total.toFixed(2),
+                },
+              },
+            },
+            items: lineItems,
+          },
+        ],
+        application_context: {
+          return_url: "http://localhost:3000/Orders", // Change to your success URL
+          cancel_url: "http://localhost:3000/Payment", // Change to your cancel URL
+        },
+      },
+    };
+
+    const response = await axios(request);
+    
+    // Get the 'approve' link from the response
+    const approveLink = response.data.links.find(link => link.rel === 'approve');
+
+    if (approveLink) {
+      // Redirect the user to the PayPal approval page
+      res.redirect(approveLink.href);
+    } else {
+      console.error("No 'approve' link found in the PayPal response.");
+      res.status(500).json({ error: "Internal server error" });
+    }
+  } catch (error) {
+    console.error("Error creating PayPal session:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Function to obtain PayPal access token

@@ -8,7 +8,7 @@ const cartItemSchema = new mongoose.Schema({
     required: true,
   },
   userId: {
-    type: String, // Assuming your user IDs are strings, adjust if necessary
+    type: Object, // Assuming your user IDs are strings, adjust if necessary
     required: true,
   },
   selectedOptions: {
