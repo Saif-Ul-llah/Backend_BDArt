@@ -1,24 +1,29 @@
 const express = require("express");
 const Registration = require("./models/registration");
-// const Provider = require("./models/providers");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-// const Product = require('./models/product');
 const session = require("express-session");
 const fileUpload = require("express-fileupload");
 const compression = require("compression");
+const Order = require("./models/Orders");
 const Product = require("./models/product");
 const mongoose = require("mongoose");
 const CartItem = require("./models/CartItems");
 const Stripe = require("stripe");
+const PreMadeArt = require("./models/PreMadeArt");
 const paypal = require("@paypal/checkout-server-sdk");
-// ('sk_test_4eC39HqLyjWDarjtT1zdp7dc')
 const stripe = Stripe("sk_test_4eC39HqLyjWDarjtT1zdp7dc");
-const axios = require('axios');
+const axios = require("axios");
+const Promotion = require("./models/Promotion");
+
+const sendEmail = require("../Backend/utilis/sendEmail");
 
 const app = express();
-// const allowedOrigins = ['https://bd-art.vercel.app'];
-const allowedOrigins = ["http://localhost:3000", "https://checkout.stripe.com",'https://bd-art.vercel.app'];
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://checkout.stripe.com",
+  "https://bd-art.vercel.app",
+];
 app.timeout = 300000;
 const port = process.env.PORT || 8080;
 
@@ -28,11 +33,11 @@ const clientId =
 const clientSecret =
   "EMw_7Z61I4z4Icnoxtx-SUKnaGBTBpaCQnGW8oqgvukAuy_oHXgS3WCHUfYN75hRfpe2Wobtjp04mc1k";
 
-const environment = new paypal.core.LiveEnvironment(clientId, clientSecret);
-const client = new paypal.core.PayPalHttpClient(environment);
+// const environment = new paypal.core.LiveEnvironment(clientId, clientSecret);
+// const client = new paypal.core.PayPalHttpClient(environment);
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "1000mb" }));
+app.use(express.urlencoded({ extended: true, limit: "500mb" }));
 
 app.use(fileUpload());
 app.use(compression());
@@ -60,7 +65,7 @@ mongoose
     });
   })
   .catch((err) => {
-    console.log(err);
+    console.log("check this", err);
   });
 
 app.get("/", (req, res) => {
@@ -78,18 +83,47 @@ app.get("/protected-route", (req, res) => {
 app.post(`/registration`, async (req, res) => {
   try {
     //  const {userName,userEmail,userPass}=req.body
-    const { userEmail } = req.body;
+    const { userEmail, userPass } = req.body;
 
     //   console.log(req.body)
-    const isNewUser = await Registration.emailExists(userEmail);
+    const isNewUser = await Registration.findOne({ userEmail, userPass });
     if (!isNewUser)
-      return res.json({ success: false, message: "already in use" });
+      return res.json({
+        success: false,
+        message: "Try with different Credential",
+      });
     const user = await Registration.create({
       user_name: req.body.userName,
       email: req.body.userEmail,
       password: req.body.userPass,
     });
     res.status(200).json(user);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/addGoogleUser", async (req, res) => {
+  try {
+    const { email, user_name } = req.body;
+
+    const existingUser = await Registration.findOne({ email, user_name });
+
+    if (existingUser) {
+      // User already exists, return the existing user
+      return res.status(200).json(existingUser);
+    }
+
+    const newUser = new Registration({
+      user_name,
+      email,
+      // password: 'GoogleEmail', // Handle this more securely if needed
+    });
+
+    await newUser.save();
+
+    res.status(200).json(newUser);
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.message });
@@ -107,12 +141,12 @@ app.use(
 
 app.post("/signin", async (req, res) => {
   try {
-    const { userEmail, userPass } = req.body;
+    const { userEmail, password } = req.body;
     const email = userEmail;
-
-    const user = await Registration.findOne({ email });
-
-    if (user && userPass === user.password) {
+    console.log(userEmail, password);
+    const user = await Registration.findOne({ email, password });
+    console.log(user);
+    if (user && password === user.password) {
       // Store user information in the session
       req.session.user = {
         email: user.email,
@@ -144,7 +178,7 @@ app.post("/admin", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
+// portfolio Products
 app.post("/add-product", async (req, res) => {
   try {
     const {
@@ -352,6 +386,19 @@ app.post("/update-cart", async (req, res) => {
 
     // Save the cart item to the database
     const savedCartItem = await newCartItem.save();
+    if (savedCartItem) {
+      const emailMessage = `Thank you for choosing BrandWave Digital ! 
+      \n\nYou've successfully added the following product to your cart:
+      \n\nProduct Name: ${productId.name}
+      Price: $${productId.price}
+      Category: ${productId.category}
+      \n\nHappy shopping!`;
+      // \n\nClick here to view your cart: [Cart Link]
+
+      const emailSubject = "Product Added to Your Cart";
+
+      const email = await sendEmail(userId.email, emailSubject, emailMessage);
+    }
 
     res.json({ message: true, savedCartItem });
   } catch (error) {
@@ -363,45 +410,15 @@ app.post("/update-cart", async (req, res) => {
 app.get("/get-cart-items/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
-    // console.log(userId);
-    const cartItems = await CartItem.find({ userId });
 
+    // console.log(userId);
+    const cartItems = await CartItem.find({ "userId._id": userId });
+    // console.log(cartItems);
     res.json({ message: true, cartItems });
   } catch (error) {
     console.error("Error getting cart items:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-});
-
-app.post("/create-checkout-session", async (req, res) => {
-  // console.log(req.body);
-  const line_items = req.body.cart.map((items) => {
-    return {
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: items.productId.name,
-          images: [items.productId.imageUrl],
-          description: items.description,
-          metadata: {
-            id: items.productId._id,
-          },
-        },
-        unit_amount: items.productId.price * 100,
-      },
-      quantity: 1,
-    };
-  });
-  const session = await stripe.checkout.sessions.create({
-    line_items,
-    mode: "payment",
-    success_url: "http://localhost:3000/Orders",
-    cancel_url: "http://localhost:3000/Payment",
-    // success_url: 'https://bd-art.vercel.app/Orders',
-    // cancel_url: 'https://bd-art.vercel.app/Payment',
-  });
-
-  res.redirect(303, session.url);
 });
 
 async function getAccessToken() {
@@ -429,6 +446,104 @@ async function getAccessToken() {
     throw new Error("Error obtaining PayPal access token");
   }
 }
+
+app.post("/create-checkout-session", async (req, res) => {
+  // console.log(req.body);
+
+  const line_items = req.body.cart.map((items) => {
+    return {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: items.productId.name,
+          images: [items.productId.imageUrl],
+          description: items.description || null,
+          metadata: {
+            id: items.productId._id,
+          },
+        },
+        unit_amount: items.productId.price * 100,
+      },
+      quantity: 1,
+    };
+  });
+  const session = await stripe.checkout.sessions.create({
+    line_items,
+    mode: "payment",
+    success_url: "http://localhost:3000/Orders",
+    cancel_url: "http://localhost:3000/Payment",
+    // success_url: 'https://bd-art.vercel.app/Orders',
+    // cancel_url: 'https://bd-art.vercel.app/Payment',
+  });
+
+  // res.redirect(303, session.url);
+  if (session) {
+    if(session.url=="http://localhost:3000/Orders"){
+      
+    {
+      req.body.cart.map(
+        async (item) => await Product.findByIdAndDelete(item.productId._id)
+      );
+    } 
+
+    const order = new Order({
+      userId: req.body.user,
+      products: req.body.cart.map((item) => ({
+        productId: item.productId._id,
+        name: item.productId.name,
+        productImage: item.productId.imageUrl,
+        quantity: 1,
+        price: item.productId.price,
+        dec: item.description,
+        selectedFile: item.selectedFile,
+        selectedOptions: item.selectedOptions,
+      })),
+      paymentMethod: "stripe",
+      paymentDetails: {}, // You can add more details as needed
+    });
+
+    await order.save();
+    
+    res.send({url:session.url});
+    // res.status(200).json(session.url);
+  } else {
+    res.send({url:session.url});
+    // res.status(200).json(session.url);
+  }
+    
+    // res.status(200).json(session.url);
+  } else {
+    res.status(400).json({ message: "failed to perform Payment" });
+  }
+});
+
+app.post("/DBandEmail", async (req, res) => {
+  const order = new Order({
+    userId: req.body.user,
+    products: req.body.cart.map((item) => ({
+      productId: item.productId._id,
+      name: item.productId.name,
+      productImage: item.productId.imageUrl,
+      quantity: 1,
+      price: item.productId.price,
+      dec: item.description,
+      selectedFile: item.selectedFile,
+      selectedOptions: item.selectedOptions,
+    })),
+    paymentMethod: "stripe", // Adjust this based on the payment method used
+    paymentDetails: {},
+  });
+
+  const dbOrder = await order.save();
+  if (dbOrder) {
+    const emai = await sendEmail(
+      req.body.user.email,
+      `${req.body.user.user_name} Booked an Order`,
+      `${order}`
+    );
+  }
+  res.status(201).json({ message: "Email and order booked sucessfully" });
+});
 
 app.post("/pay", async (req, res) => {
   try {
@@ -481,15 +596,42 @@ app.post("/pay", async (req, res) => {
         },
       },
     };
-
     const response = await axios(request);
-    
     // Get the 'approve' link from the response
-    const approveLink = response.data.links.find(link => link.rel === 'approve');
-
+    const approveLink = response.data.links.find(
+      (link) => link.rel === "approve"
+    );
     if (approveLink) {
-      // Redirect the user to the PayPal approval page
-      res.redirect(approveLink.href);
+      if (approveLink.href === "http://localhost:3000/Orders") {
+        // Create and save the order in your database
+
+        {
+          req.body.cart.map(
+            async (item) => await Product.findByIdAndDelete(item.productId._id)
+          );
+        } 
+
+        const order = new Order({
+          userId: req.body.user,
+          products: req.body.cart.map((item) => ({
+            productId: item.productId._id,
+            name: item.productId.name,
+            productImage: item.productId.imageUrl,
+            quantity: 1,
+            price: item.productId.price,
+            dec: item.description,
+            selectedFile: item.selectedFile,
+            selectedOptions: item.selectedOptions,
+          })),
+          paymentMethod: "paypal",
+          paymentDetails: {}, // You can add more details as needed
+        });
+
+        await order.save();
+        res.status(200).json(approveLink);
+      } else {
+        res.status(200).json(approveLink);
+      }
     } else {
       console.error("No 'approve' link found in the PayPal response.");
       res.status(500).json({ error: "Internal server error" });
@@ -500,4 +642,318 @@ app.post("/pay", async (req, res) => {
   }
 });
 
-// Function to obtain PayPal access token
+async function getOrderDetails(orderId) {
+  try {
+    const accessToken = await getAccessToken(); // Assume you have implemented this function to get the access token
+
+    const request = {
+      method: "get",
+      url: `https://api.paypal.com/v2/checkout/orders/${orderId}`,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+
+    const response = await axios(request);
+
+    // Assuming the response contains order details
+    const orderDetails = response.data;
+
+    return orderDetails;
+  } catch (error) {
+    console.error("Error fetching order details from PayPal:", error.message);
+    throw error;
+  }
+}
+
+app.get("/Orders", async (req, res) => {
+  try {
+    const orderId = req.query.token;
+
+    // Use the order ID to get details about the order from PayPal
+    const orderDetails = await getOrderDetails(orderId);
+
+    // Check the order status
+    if (orderDetails && orderDetails.status === "COMPLETED") {
+      // Update the order in your database with payment details
+      await Order.findOneAndUpdate(
+        {
+          /* your query to find the order by orderId */
+        },
+        { paymentDetails: orderDetails }
+      );
+
+      res.send("Payment successful");
+    } else {
+      res.send("Payment failed");
+    }
+  } catch (error) {
+    console.error("Error handling PayPal return:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.delete("/remove-product/:productId", async (req, res) => {
+  const { productId } = req.params;
+
+  try {
+    // Remove the product from the cart based on the product ID
+    const result = await CartItem.deleteOne({ "productId._id": productId });
+
+    if (result.deletedCount === 1) {
+      return res.status(200).json({ message: "Product removed successfully" });
+    } else {
+      return res.status(404).json({ message: "Product not found in the cart" });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/orders/:userId", async (req, res) => {
+  const userId = req.params.userId;
+  // const cartItems = await CartItem.find({ "userId._id": userId });
+  const userOrders = await Order.find({ "userId._id": userId });
+  console.log(userOrders);
+  res.json(userOrders);
+});
+
+app.get("/get-Orders", async (req, res) => {
+  try {
+    const products = await Order.find().select("userId products paymentMethod");
+
+    res.status(200).json(products);
+  } catch (error) {
+    console.error("Error getting products:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// PreMadeArt
+app.post("/add-PreMadeArt", async (req, res) => {
+  try {
+    const {
+      name,
+      price,
+      category,
+      imageData,
+      Background,
+      animation,
+      Character_Proportion,
+      Rigging,
+      Overlay_Type,
+    } = req.body;
+
+    // Basic validation
+    if (!name || !price || !category || !imageData) {
+      return res
+        .status(400)
+        .json({ message: "All required fields must be provided." });
+    }
+
+    // Create a new product instance with required fields
+    const newProductData = {
+      name,
+      price,
+      category,
+      imageUrl: imageData,
+    };
+
+    // Set optional fields
+    newProductData.Background = JSON.parse(Background);
+    newProductData.animation = JSON.parse(animation);
+    newProductData.Character_Proportion = JSON.parse(Character_Proportion);
+    newProductData.Rigging = JSON.parse(Rigging);
+    newProductData.Overlay_Type = JSON.parse(Overlay_Type);
+
+    // Create a new Product instance with all fields
+    const newProduct = new PreMadeArt(newProductData);
+
+    // Save the product to the database
+    const savedProduct = await newProduct.save();
+
+    // Return a success message along with the saved product
+    res
+      .status(201)
+      .json({ message: "Product added successfully.", savedProduct });
+  } catch (error) {
+    console.error("Error adding product:", error);
+
+    // Differentiate between validation errors and database errors
+    if (error.name === "ValidationError") {
+      // Extract specific validation error messages
+      const validationErrors = Object.values(error.errors).map(
+        (e) => e.message
+      );
+      res
+        .status(400)
+        .json({ message: "Validation failed.", errors: validationErrors });
+    } else {
+      // Generic server error message
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+});
+
+app.get("/get-PreMadeArt", async (req, res) => {
+  try {
+    // Retrieve a limited set of products from the database
+    // const { page = 1, pageSize = 10 } = req.query;
+    const products = await PreMadeArt.find().select(
+      "name category price imageUrl brand"
+    );
+
+    // Send the list of products as a response
+    res.status(200).json(products);
+  } catch (error) {
+    console.error("Error getting PreMadeArt:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.post("/update-PreMadeArt/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { name, brand, price, category, imageData, imageContentType } =
+      req.body;
+
+    console.log("Received image data on the server:", imageData);
+    console.log("Received image content type on the server:", imageContentType);
+
+    // Basic validation
+    if (
+      !name ||
+      !brand ||
+      !price ||
+      !category ||
+      !imageData ||
+      !imageContentType
+    ) {
+      return res.status(400).json({ message: "All fields are required." });
+    }
+
+    // Find the product by ID
+    const product = await PreMadeArt.findById(productId);
+
+    // Check if the product exists
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    // Update product details
+    product.name = name;
+    product.brand = brand;
+    product.price = price;
+    product.category = category;
+
+    // Update image if provided
+    if (imageData && imageContentType) {
+      product.imageUrl = `data:${imageContentType};base64,${imageData}`;
+    }
+
+    // Save the updated product
+    const updatedProduct = await PreMadeArt.save();
+
+    res
+      .status(200)
+      .json({ message: "Product updated successfully.", updatedProduct });
+  } catch (error) {
+    console.error("Error updating product:", error);
+
+    // Differentiate between validation errors and database errors
+    if (error.name === "ValidationError") {
+      // Extract specific validation error messages
+      const validationErrors = Object.values(error.errors).map(
+        (e) => e.message
+      );
+      res
+        .status(400)
+        .json({ message: "Validation failed.", errors: validationErrors });
+    } else {
+      // Generic server error message
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+});
+
+app.delete("/delete-PreMadeArt/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+
+    // Find the product by ID and delete it
+    await PreMadeArt.findByIdAndDelete(productId);
+
+    res.status(200).json({ message: "Product deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting product:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+app.post("/apply-promo", async (req, res) => {
+  const { promoCode, email } = req.body;
+  console.log(promoCode, email);
+  try {
+    // Check if the promo code is valid and active
+    const promotion = await Promotion.findOne({
+      code: promoCode,
+      isActive: true,
+    });
+    if (!promotion) {
+      return res.status(404).json({ error: "Invalid or inactive promo code" });
+    }
+
+    // Check if the user has already applied this promo code
+    const existingRegistration = await Registration.findOne({
+      email,
+      promoCode: promoCode,
+    });
+    if (existingRegistration) {
+      return res
+        .status(400)
+        .json({ error: "Promo code already applied by this user" });
+    }
+
+    // Update the user's registration record to indicate the promo code was applied
+    await Registration.findOneAndUpdate({ email }, { promoCode: promoCode });
+
+    // Return success response with discount percentage
+    return res.json({
+      success: true,
+      discountPercentage: promotion.discountPercentage,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/create-promo", async (req, res) => {
+  console.log(req.body);
+  const { code, discountPercentage, isActive } = req.body;
+
+  try {
+    // Check if the promo code already exists
+    const existingPromo = await Promotion.findOne({ code });
+
+    if (existingPromo) {
+      return res.status(400).json({ error: "Promo code already exists" });
+    }
+
+    // Create a new promo code
+    const newPromo = new Promotion({
+      code,
+      discountPercentage,
+      isActive: isActive || true, // Default to active if not provided
+    });
+
+    // Save the new promo code to the database
+    await newPromo.save();
+
+    return res.json({ success: true, promo: newPromo });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});

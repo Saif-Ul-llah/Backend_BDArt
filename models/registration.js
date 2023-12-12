@@ -1,33 +1,61 @@
+// Inside your MongoDB model file (e.g., Registration.js)
 
-const mongoose=require('mongoose')
+const mongoose = require('mongoose');
 
-const userSchema=mongoose.Schema({
-    user_name:{
-        type:String     
+const userSchema = mongoose.Schema({
+  user_name: {
+    type: String,
+  },
+  email: {
+    type: String,
+  },
+  password: {
+    type: String,
+  },
+  apply: {
+    promoCode: {
+      type: String,
     },
-    email:{
-        type:String      
-    },
-    password:{
-        type:String
-    }
-})
+  },
+});
 
-userSchema.statics.emailExists= async function(email){
-    try{
-       // console.log(typeof email)
-        const user=await this.findOne({email})
-        if(user) return false
+userSchema.statics.emailExists = async function (email) {
+  try {
+    const user = await this.findOne({ email });
+    if (user) return false;
+
+    return true;
+  } catch (error) {
+    console.log(`error from emailExists: ${error.message}`);
+    return false;
+  }
+};
+
+// New method to add a user based on Google login data
+userSchema.statics.addGoogleUser = async function (userData) {
+  try {
+    const { email, user_name } = userData;
     
-        return true
+    // Check if the user already exists
+    const userExists = await this.emailExists(email);
+    
+    if (!userExists) {
+      // User already exists, do nothing
+      return;
     }
-    catch(error){
-        console.log(`error from emailExists: ${error.message}`)
-        return false
-    }
-} 
 
+    // User doesn't exist, add to the database
+    const newUser = new this({
+      user_name,
+      email,
+    });
 
-const Registration = mongoose.model('Registration',userSchema)
+    await newUser.save();
+  } catch (error) {
+    console.log(`error from addGoogleUser: ${error.message}`);
+  }
+};
 
-module.exports=Registration
+const Registration = mongoose.model('Registration', userSchema);
+
+module.exports = Registration;
