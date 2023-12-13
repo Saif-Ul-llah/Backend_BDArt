@@ -15,8 +15,12 @@ const paypal = require("@paypal/checkout-server-sdk");
 const stripe = Stripe("sk_test_4eC39HqLyjWDarjtT1zdp7dc");
 const axios = require("axios");
 const Promotion = require("./models/Promotion");
+const boom=require('@hapi/boom')
 
-const sendEmail = require("../Backend/utilis/sendEmail");
+const { createTransport } = require("nodemailer");
+
+
+// const sendEmail = require("../Backend/utilis/sendEmail");
 
 const app = express();
 const allowedOrigins = [
@@ -444,6 +448,29 @@ async function getAccessToken() {
   } catch (error) {
     console.error("Error obtaining PayPal access token:", error.message);
     throw new Error("Error obtaining PayPal access token");
+  }
+}
+
+const sendEmail = async (to, subject, text) => {
+  try {
+    const transporter = createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.APP_MAIL||"saifhammad411@gmail.com",
+        pass: process.env.APP_MAIL_PASS||"lxsh ivui pjyy olkf",
+      },
+    });
+  const emailResponse=  await transporter.sendMail({
+      to,
+      subject,
+      text,
+      from: "saifhammad411@gmail.com",
+    });
+
+    return emailResponse
+  } catch (error) {
+    console.log(error?.message);
+    throw boom.badRequest(error.message)
   }
 }
 
