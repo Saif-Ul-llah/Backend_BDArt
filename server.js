@@ -12,7 +12,7 @@ const CartItem = require("./models/CartItems");
 const Stripe = require("stripe");
 const PreMadeArt = require("./models/PreMadeArt");
 const paypal = require("@paypal/checkout-server-sdk");
-const stripe = Stripe("sk_test_4eC39HqLyjWDarjtT1zdp7dc");
+const stripe = Stripe("sk_live_51N1DWKI7FF8u2FpoauwlXGiQZHCI80sTtwQqFSJ4EQRO 1C90b0D7595UsU3ZM9mOBR1rF@Aawz5V7VKWYNLJVmxg@@mNhrjrgS");
 const axios = require("axios");
 const Promotion = require("./models/Promotion");
 const boom=require('@hapi/boom')
@@ -497,15 +497,15 @@ app.post("/create-checkout-session", async (req, res) => {
   const session = await stripe.checkout.sessions.create({
     line_items,
     mode: "payment",
-    success_url: "http://localhost:3000/Orders",
-    cancel_url: "http://localhost:3000/Payment",
-    // success_url: 'https://bd-art.vercel.app/Orders',
-    // cancel_url: 'https://bd-art.vercel.app/Payment',
+    // success_url: "http://localhost:3000/Orders",
+    // cancel_url: "http://localhost:3000/Payment",
+    success_url: 'https://bd-art.vercel.app/Orders',
+    cancel_url: 'https://bd-art.vercel.app/Payment',
   });
 
   // res.redirect(303, session.url);
   if (session) {
-    if(session.url=="http://localhost:3000/Orders"){
+    if(session.url=="https://bd-art.vercel.app/Orders"){
       
     {
       req.body.cart.map(
@@ -618,8 +618,8 @@ app.post("/pay", async (req, res) => {
           },
         ],
         application_context: {
-          return_url: "http://localhost:3000/Orders", // Change to your success URL
-          cancel_url: "http://localhost:3000/Payment", // Change to your cancel URL
+          return_url: "https://bd-art.vercel.app/Orders", // Change to your success URL
+          cancel_url: "https://bd-art.vercel.app/Payment", // Change to your cancel URL
         },
       },
     };
@@ -629,7 +629,7 @@ app.post("/pay", async (req, res) => {
       (link) => link.rel === "approve"
     );
     if (approveLink) {
-      if (approveLink.href === "http://localhost:3000/Orders") {
+      if (approveLink.href === "https://bd-art.vercel.app/Orders") {
         // Create and save the order in your database
 
         {
