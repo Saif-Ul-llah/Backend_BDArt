@@ -27,6 +27,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://checkout.stripe.com",
   "https://bd-art.vercel.app",
+  "https://thebdarts.com",
 ];
 app.timeout = 300000;
 const port = process.env.PORT || 8080;
