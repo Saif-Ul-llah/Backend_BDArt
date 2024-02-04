@@ -12,13 +12,12 @@ const CartItem = require("./models/CartItems");
 const Stripe = require("stripe");
 const PreMadeArt = require("./models/PreMadeArt");
 const paypal = require("@paypal/checkout-server-sdk");
-const stripe = Stripe("sk_live_51N1DWKI7FF8u2FpoauwlXGiQZHCI80sTtwQqFSJ4EQRO 1C90b0D7595UsU3ZM9mOBR1rF@Aawz5V7VKWYNLJVmxg@@mNhrjrgS");
+const stripe = Stripe("sk_test_4eC39HqLyjWDarjtT1zdp7dc");
 const axios = require("axios");
 const Promotion = require("./models/Promotion");
-const boom=require('@hapi/boom')
+const boom = require("@hapi/boom");
 
 const { createTransport } = require("nodemailer");
-
 
 // const sendEmail = require("../Backend/utilis/sendEmail");
 
@@ -85,24 +84,55 @@ app.get("/protected-route", (req, res) => {
   }
 });
 
+// app.post(`/registration`, async (req, res) => {
+//   try {
+//     //  const {userName,userEmail,userPass}=req.body
+//     const { userEmail, userPass } = req.body;
+
+//     console.log(req.body);
+//     const isNewUser = await Registration.findOne({ userEmail, userPass });
+//     if (!isNewUser) {
+//       console.log(isNewUser, "isNeuwe condition");
+//       return res.json({
+//         success: false,
+//         message: "Try with different Credential",
+//       });
+//     } else {
+//       const user = await Registration.create({
+//         user_name: req.body.userName,
+//         email: req.body.userEmail,
+//         password: req.body.userPass,
+//       });
+//       res.status(200).json(user);
+//     }
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).json({ message: error.message });
+//   }
+// });
+
 app.post(`/registration`, async (req, res) => {
   try {
-    //  const {userName,userEmail,userPass}=req.body
-    const { userEmail, userPass } = req.body;
+    const { userName, userEmail, userPass } = req.body;
 
-    //   console.log(req.body)
-    const isNewUser = await Registration.findOne({ userEmail, userPass });
-    if (!isNewUser)
+    console.log(req.body);
+    
+    const existingUser = await Registration.findOne({ email: userEmail ,password:userPass});
+    
+    if (existingUser) {
+      console.log(existingUser, "existingUser condition");
       return res.json({
         success: false,
-        message: "Try with different Credential",
+        message: "User with this email already exists. Try with a different email.",
       });
-    const user = await Registration.create({
-      user_name: req.body.userName,
-      email: req.body.userEmail,
-      password: req.body.userPass,
-    });
-    res.status(200).json(user);
+    } else {
+      const user = await Registration.create({
+        user_name: userName,
+        email: userEmail,
+        password: userPass,
+      });
+      res.status(200).json(user);
+    }
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.message });
@@ -193,9 +223,9 @@ app.post("/add-product", async (req, res) => {
       imageData,
       Background,
       animation,
-      Character_Proportion,
+      Character_Proportion, //here error
       Rigging,
-      Overlay_Type,
+      Overlay_Type, //and here
     } = req.body;
 
     // Basic validation
@@ -253,10 +283,15 @@ app.get("/get-products", async (req, res) => {
   try {
     // Retrieve a limited set of products from the database
     // const { page = 1, pageSize = 10 } = req.query;
-    const products = await Product.find().select(
-      "name category price imageUrl brand"
-    );
-
+    // const products = await Product.find().select(
+    //   "name category price imageUrl brand"
+    // );
+    const { page = 1, pageSize = 100 } = req.query;
+    const products = await Product.find()
+      .select("name category price imageUrl brand")
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
+    
     // Send the list of products as a response
     res.status(200).json(products);
   } catch (error) {
@@ -268,7 +303,7 @@ app.get("/get-products", async (req, res) => {
 app.post("/update-product/:id", async (req, res) => {
   try {
     const productId = req.params.id;
-    const { name, brand, price, category, imageData, imageContentType } =
+    const { name, price, category, imageData, imageContentType } =
       req.body;
 
     console.log("Received image data on the server:", imageData);
@@ -277,11 +312,8 @@ app.post("/update-product/:id", async (req, res) => {
     // Basic validation
     if (
       !name ||
-      !brand ||
       !price ||
-      !category ||
-      !imageData ||
-      !imageContentType
+      !category 
     ) {
       return res.status(400).json({ message: "All fields are required." });
     }
@@ -296,7 +328,7 @@ app.post("/update-product/:id", async (req, res) => {
 
     // Update product details
     product.name = name;
-    product.brand = brand;
+    // product.brand = brand;
     product.price = price;
     product.category = category;
 
@@ -361,7 +393,7 @@ app.get("/get-product/:id", async (req, res) => {
 
 app.get("/products-by-category/:category", async (req, res) => {
   try {
-    const { page = 1, pageSize = 10 } = req.query;
+    const { page = 1, pageSize = 100 } = req.query;
     const { category } = req.params;
 
     const products = await Product.find({ category: category })
@@ -457,23 +489,46 @@ const sendEmail = async (to, subject, text) => {
     const transporter = createTransport({
       service: "gmail",
       auth: {
-        user: process.env.APP_MAIL||"saifhammad411@gmail.com",
-        pass: process.env.APP_MAIL_PASS||"lxsh ivui pjyy olkf",
+        user: process.env.APP_MAIL || "saifhammad411@gmail.com",
+        pass: process.env.APP_MAIL_PASS || "lxsh ivui pjyy olkf",
       },
     });
-  const emailResponse=  await transporter.sendMail({
+    const emailResponse = await transporter.sendMail({
       to,
       subject,
       text,
       from: "saifhammad411@gmail.com",
     });
 
-    return emailResponse
+    return emailResponse;
   } catch (error) {
     console.log(error?.message);
-    throw boom.badRequest(error.message)
+    throw boom.badRequest(error.message);
+  }
+};
+
+async function checkPaymentStatus(paymentIntentId) {
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    // Check the status of the payment intent
+    if (paymentIntent.status === "succeeded") {
+      console.log("Payment succeeded");
+      // Do something if payment is successful
+    } else {
+      console.log("Payment failed or is still in progress");
+      // Do something if payment fails or is still in progress
+    }
+
+    return paymentIntent; // You can return the payment intent object for further processing
+  } catch (error) {
+    console.error("Error retrieving payment intent:", error);
+    throw error; // Handle the error according to your application's needs
   }
 }
+// Example usage:
+// const paymentIntentId = 'pi_1234567890'; // Replace with the actual payment intent ID
+// checkPaymentStatus(paymentIntentId);
 
 app.post("/create-checkout-session", async (req, res) => {
   // console.log(req.body);
@@ -500,45 +555,15 @@ app.post("/create-checkout-session", async (req, res) => {
     mode: "payment",
     // success_url: "http://localhost:3000/Orders",
     // cancel_url: "http://localhost:3000/Payment",
-    success_url: 'https://bd-art.vercel.app/Orders',
-    cancel_url: 'https://bd-art.vercel.app/Payment',
+    success_url: "https://thebdarts.com/Orders",
+    cancel_url: "https://thebdarts.com/Payment",
   });
 
   // res.redirect(303, session.url);
   if (session) {
-    if(session.url=="https://bd-art.vercel.app/Orders"){
-      
-    {
-      req.body.cart.map(
-        async (item) => await Product.findByIdAndDelete(item.productId._id)
-      );
-    } 
-
-    const order = new Order({
-      userId: req.body.user,
-      products: req.body.cart.map((item) => ({
-        productId: item.productId._id,
-        name: item.productId.name,
-        productImage: item.productId.imageUrl,
-        quantity: 1,
-        price: item.productId.price,
-        dec: item.description,
-        selectedFile: item.selectedFile,
-        selectedOptions: item.selectedOptions,
-      })),
-      paymentMethod: "stripe",
-      paymentDetails: {}, // You can add more details as needed
-    });
-
-    await order.save();
-    
-    res.send({url:session.url});
-    // res.status(200).json(session.url);
-  } else {
-    res.send({url:session.url});
-    // res.status(200).json(session.url);
-  }
-    
+    res.send({ url: session.url });
+    console.log("SID", session.id);
+    checkPaymentStatus(session.id);
     // res.status(200).json(session.url);
   } else {
     res.status(400).json({ message: "failed to perform Payment" });
@@ -637,7 +662,7 @@ app.post("/pay", async (req, res) => {
           req.body.cart.map(
             async (item) => await Product.findByIdAndDelete(item.productId._id)
           );
-        } 
+        }
 
         const order = new Order({
           userId: req.body.user,
