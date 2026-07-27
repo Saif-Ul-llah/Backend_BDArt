@@ -27,5 +27,8 @@
   "description": "This is a backend project using NestJS and Express.",
   "main": "server.js",
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "overrides": {
+    "picomatch": "^2.3.2"
+  }
 }
