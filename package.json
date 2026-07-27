@@ -11,7 +11,7 @@
     "@nestjs/core": "^10.2.8",
     "@nestjs/platform-express": "^10.2.8",
     "@paypal/checkout-server-sdk": "^1.0.3",
-    "axios": "^1.6.2",
+    "axios": "^1.18.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
     "express": "^4.18.2",
